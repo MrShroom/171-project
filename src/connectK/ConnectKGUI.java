@@ -23,7 +23,7 @@ public class ConnectKGUI extends JFrame {
 	
 	public ConnectKGUI(BoardModel model){
 		super("ConnectK");
-		setIconImage(new ImageIcon(getClass().getResource("/icon.png")).getImage());		
+		//setIconImage(new ImageIcon(getClass().getResource("icon.png")).getImage());		
 		setLayout(new BorderLayout());
 		
 		//make a status bar
