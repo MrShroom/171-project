@@ -15,7 +15,7 @@ public class AIDSAI extends CKPlayer {
 	
 	public AIDSAI(byte player, BoardModel state) {
 		super(player, state);
-		teamName = "Artificial Intelligence Development Struggle";
+		teamName = "TheArtificialIntelligenceDevelopmentStruggle";
 	}
 
 	@Override
@@ -23,11 +23,26 @@ public class AIDSAI extends CKPlayer {
 	{
 		if (state.spacesLeft == state.getHeight() * state.getWidth())
 		{
-			return new Point(state.getHeight()/2, state.getWidth()/2);
+			return new Point( state.getWidth()/2, state.getHeight()/2);
 		}
-		Integer alpha = Integer.MIN_VALUE, beta =Integer.MAX_VALUE;
-		PointAndValue v = maxPlay(alpha,beta , state, 5 );
-		return v.point;
+		Set<Point> moves = getPossibleMove(state, this.player);
+		Set<PointAndValue> choices = new HashSet<PointAndValue>();
+		for(Point myMove : moves)
+		{
+			PointAndValue v = minPlay(Integer.MIN_VALUE, Integer.MAX_VALUE , state.placePiece(myMove, this.player), 4 );
+			v.point = myMove;
+			choices.add(v);
+		}
+		Point best =new Point();
+		int bestVal = Integer.MIN_VALUE;
+		for(PointAndValue choice : choices)
+		{				
+			if(choice.value>bestVal || choice.point == null)
+			{
+				best = choice.point;
+			}
+		}
+		return best;
 	}
 
 	@Override
@@ -35,83 +50,119 @@ public class AIDSAI extends CKPlayer {
 		return getMove(state);
 	}
 	
-	private PointAndValue maxPlay(Integer alpha, Integer beta, BoardModel state, int iterationsLeft )
+	private PointAndValue maxPlay( Integer alpha, Integer beta, BoardModel state, int iterationsLeft )
 	{
 		PointAndValue v = new PointAndValue();
-		if (iterationsLeft == 0 )
-		{
-			v.value = heuristic(state);
-			v.point = state.getLastMove();
-			return v;
-		}
+		
 		if( state.winner() == this.player)
 		{
 			v.value = Integer.MAX_VALUE;
 			v.point = state.getLastMove();
+			alpha = Math.max(alpha, v.value);
 			return v;
-		}
-		if(state.winner() == (this.player == 1 ? 2 : 1)){
-			v.value = Integer.MIN_VALUE;
-			v.point = state.getLastMove();
-			return v;
-			
-		}
-		v.value = Integer.MIN_VALUE; 
-		Set<Point> moves = getPossibleMove(state, this.player);
-		for(Point myMove : moves)
-		{
-			PointAndValue temp = minPlay(alpha, beta, state.placePiece(myMove, this.player),iterationsLeft-1);
-			v = v.value >= temp.value ? v : temp;
-			if(v.value >= beta)
-			{
-				v.point = myMove;
-				return v;
-			}
-			alpha = Math.max(alpha,v.value);
 		}
 		
+		if(state.winner() == (this.player == 1 ? 2 : 1))
+		{
+			v.value = Integer.MIN_VALUE;
+			v.point = state.getLastMove();
+			alpha = Math.max(alpha, v.value);
+			return v;			
+		}
+		
+		if(state.winner() == 0)
+		{
+			v.value = 0;
+			v.point = state.getLastMove();
+			alpha = Math.max(alpha, v.value);
+			return v;			
+		}
+		
+		if (iterationsLeft == 0 )
+		{
+			
+			v.value = heuristic(state);
+			v.point = state.getLastMove();
+			alpha = Math.max(alpha, v.value);
+			return v;
+		}
+		
+		v.value = Integer.MIN_VALUE; 
+		Set<Point> moves = getPossibleMove(state, this.player);
+		
+		for(Point myMove : moves)
+		{
+			PointAndValue w = minPlay(alpha, beta , state.placePiece(myMove, this.player), iterationsLeft-1 );
+			w.point = myMove;
+			if( w.value > v.value)
+			{
+				v.value = w.value;
+				v.point = myMove;
+			}
+			if( v.value >= beta)
+				return v;
+			alpha = Math.max(alpha, v.value);
+		}		
+	
 		return v;		
 	}
 	
 	private PointAndValue minPlay(Integer alpha, Integer beta, BoardModel state,int iterationsLeft )
 	{
 		PointAndValue v = new PointAndValue();
-		if (iterationsLeft == 0){
-			int eval = heuristic(state);
-			v.value = eval;
-			v.point = state.getLastMove();
-			return v;
-		}
+		byte otherPlayer = (byte) (this.player == 1 ? 2 : 1);
+		
 		if( state.winner() == this.player)
 		{
 			v.value = Integer.MAX_VALUE;
 			v.point = state.getLastMove();
+			beta = Math.min(beta, v.value);
 			return v;
 		}
-		if(state.winner() == (this.player == 1 ? 2 : 1)){
+		
+		if(state.winner() == otherPlayer)
+		{
 			v.value = Integer.MIN_VALUE;
 			v.point = state.getLastMove();
-			return v;
-			
+			beta = Math.min(beta, v.value);
+			return v;			
 		}
-		byte otherPlayer = (byte) (this.player == 1 ? 2 : 1);
-		v.value = Integer.MAX_VALUE; 
-		Set<Point> moves = getPossibleMove(state, otherPlayer);
+		
+		if(state.winner() == 0)
+		{
+			v.value = 0;
+			v.point = state.getLastMove();
+			beta = Math.min(beta, v.value);
+			return v;			
+		}
+		
+		if (iterationsLeft == 0){
+			int eval = heuristic(state);
+			v.value = eval;
+			v.point = state.getLastMove();
+			beta = Math.min(beta, v.value);
+			return v;
+		}
+		
+		v.value = Integer.MAX_VALUE; 		
+		
+		Set<Point> moves = getPossibleMove(state, this.player);
+				
 		for(Point myMove : moves)
 		{
-			PointAndValue temp = maxPlay(alpha, beta, state.placePiece(myMove, otherPlayer),iterationsLeft-1);
-			if(v.value >= temp.value)
-				v = temp;
-			
-			if(v.value <= alpha)
+			PointAndValue w = maxPlay(alpha, beta , state.placePiece(myMove, otherPlayer), iterationsLeft-1 );
+			w.point = myMove;
+			if( w.value < v.value)
 			{
+				v.value = w.value;
 				v.point = myMove;
-				return v;
 			}
-			beta = Math.min(beta,v.value);
-		}
-	
-		return v;	
+			
+			if( v.value <= alpha)
+				return v;
+			beta = Math.min(beta, v.value);
+		}		
+		return v;
 	}
 	
 	private Set<Point> getPossibleMove(BoardModel state, byte player) 
@@ -149,32 +200,34 @@ public class AIDSAI extends CKPlayer {
 		}
 		return output;
 	}
-public void printBoard(BoardModel state)
-{
-	System.out.println("****************************");
-	for (int j = state.getHeight()-1 ; j >= 0; j--)
+
+	public void printBoard(BoardModel state)
 	{
-		for(int i = 0; i < state.getWidth(); i++)
-		{	
-			System.out.print("| " + state.getSpace(i,j) + " |" );
+		System.out.println("****************************");
+		for (int j = state.getHeight()-1 ; j >= 0; j--)
+		{
+			for(int i = 0; i < state.getWidth(); i++)
+			{	
+				System.out.print("| " + state.getSpace(i,j) + " |" );
+			}
+			System.out.println();
 		}
-		System.out.println();
+		System.out.println("****************************");
 	}
-	System.out.println("****************************");
-}
 
 	private int heuristic(BoardModel state)
 	{ 
 		if (state.gravity)
 			return heuristicWithGrav( state );
 		else
-			return heuristicNoGrav( state );
+			return EvaluateState.evaluate(state, this.player);//heuristicNoGrav( state );
 	}
 	
 	
 	private int heuristicNoGrav(BoardModel state)
 	{
 		int val = 1;
+		byte otherPlayer = (byte)(this.player == 1 ? 2 : 1);
 		List<Set<Point>> checkedPoints = new ArrayList<Set<Point>>();
 		//#0 is horizontal, 1 is vertical, 2 is up right/down left, 3 is up left/down right
 		for(int i=4; i-- > 0;)
@@ -189,8 +242,9 @@ public void printBoard(BoardModel state)
 				else if(state.getSpace(i,j)== this.player )
 				{	
 					val += countByMe(state, i, j,checkedPoints, this.player);
-				} else {				
-					val -= countByMe(state, i, j,checkedPoints, (byte)(this.player == 1 ? 2 : 1));
+				}else
+				{			
+					val -= countByMe(state, i, j,checkedPoints, otherPlayer);
 				}
 			}
 		}
@@ -214,21 +268,17 @@ public void printBoard(BoardModel state)
 	
 
 
-	private int countLeftDiag(BoardModel state, int x, int y, Set<Point> set, byte currentPlayer) {
-		// TODO Auto-generated method stub
-		return 0;
-	}
-
-	private int countRightDiag(BoardModel state, int x, int y, Set<Point> set, byte currentPlayer) {
-		
+	private int countLeftDiag(BoardModel state, int x, int y, Set<Point> set, byte currentPlayer) 
+	{
+		byte otherPlayer = (byte)(currentPlayer == 1 ? 2 : 1);
 		int value = 0, blankChain = 0, blanks = 0;
 		List<Integer> listOfChains = new ArrayList<Integer>();
 		int currentChain =0;
 		int totalSpace =0;
 		int currentY = y, currentX = x;
 		
-		while(currentY < state.getHeight() && currentX < state.getWidth() && 
-				state.getSpace(currentX,currentY ) != (byte)(this.player == 1 ? 2 : 1))
+		while(currentY < state.getHeight() && currentX >= 0  && 
+				state.getSpace(currentX,currentY ) != otherPlayer )
 		{		
 			totalSpace++;
 			if( state.getSpace(currentX,currentY ) == currentPlayer )
@@ -245,17 +295,19 @@ public void printBoard(BoardModel state)
 				if(++blankChain > state.getkLength())
 					break;	
 			}
+			set.add(new Point(currentX,currentY));
 			currentY++;
-			currentX++;
+			currentX--;
+			
 		}
 		
 		currentChain = 0;
 		blankChain = 0;
 		currentY--;
-		currentX--;
+		currentX++;
 		
-		while(currentY >= 0 && currentX >= 0 
-				&& state.getSpace(currentX,currentY ) != (byte)(this.player == 1 ? 2 : 1))
+		while(currentY >= 0 && currentX < state.getWidth() 
+				&& state.getSpace(currentX,currentY ) != otherPlayer)
 		{
 			totalSpace += (currentY < y) ? 1 : 0;
 			if( state.getSpace(currentX,currentY ) == currentPlayer )
@@ -273,19 +325,89 @@ public void printBoard(BoardModel state)
 				if(currentY < y && ++blankChain > state.getkLength())
 					break;
 			}
+			set.add(new Point(currentX,currentY));
+			currentY--;
+			currentX++;
+		}
+		if(totalSpace < state.getkLength())
+			return 0;
+		for(Integer i : listOfChains)
+			value += i * i *2;
+		value +=blanks;
+		return value;
+	}
+
+	private int countRightDiag(BoardModel state, int x, int y, Set<Point> set, byte currentPlayer) 
+	{
+		byte otherPlayer = (byte)(currentPlayer == 1 ? 2 : 1);
+		int value = 0, blankChain = 0, blanks = 0;
+		List<Integer> listOfChains = new ArrayList<Integer>();
+		int currentChain =0;
+		int totalSpace =0;
+		int currentY = y, currentX = x;
+		
+		while(currentY < state.getHeight() && currentX < state.getWidth() && 
+				state.getSpace(currentX,currentY ) != otherPlayer)
+		{		
+			totalSpace++;
+			if( state.getSpace(currentX,currentY ) == currentPlayer )
+			{
+				++currentChain;
+				set.add(new Point(currentX, currentY));
+				blankChain = 0;
+			}
+			else
+			{
+				listOfChains.add(currentChain);
+				currentChain = 0;
+				blanks++;
+				if(++blankChain > state.getkLength())
+					break;	
+			}
+			set.add(new Point(currentX,currentY));
+			currentY++;
+			currentX++;
+		}
+		
+		currentChain = 0;
+		blankChain = 0;
+		currentY--;
+		currentX--;
+		
+		while(currentY >= 0 && currentX >= 0 
+				&& state.getSpace(currentX,currentY ) != otherPlayer)
+		{
+			totalSpace += (currentY < y) ? 1 : 0;
+			if( state.getSpace(currentX,currentY ) == currentPlayer )
+			{
+				++currentChain;
+				blankChain = 0;
+			}
+			else
+			{
+				if(currentY < y){
+					blanks++;
+					listOfChains.add(currentChain);
+				}
+				currentChain = 0;
+				if(currentY < y && ++blankChain > state.getkLength())
+					break;
+			}
+			set.add(new Point(currentX,currentY));
 			currentY--;
 			currentX--;
 		}
 		if(totalSpace < state.getkLength())
 			return 0;
 		for(Integer i : listOfChains)
-			value += i * i;
+			value += i * i *2;
 		value +=blanks;
 		return value;
 	}
 
-	private int countVertical(BoardModel state, int x, int y, Set<Point> set, byte currentPlayer) {
-		
+	private int countVertical(BoardModel state, int x, int y, Set<Point> set, byte currentPlayer) 
+	{
+		byte otherPlayer = (byte)(currentPlayer == 1 ? 2 : 1);
 		int value = 0, blankChain = 0, blanks = 0;
 		List<Integer> listOfChains = new ArrayList<Integer>();
 		int currentChain =0;
@@ -293,7 +415,7 @@ public void printBoard(BoardModel state)
 		int currentY = y;
 		
 		while(currentY < state.getHeight() &&
-				state.getSpace( x, currentY ) != (byte)(this.player == 1 ? 2 : 1))
+				state.getSpace( x, currentY ) != otherPlayer)
 		{		
 			totalSpace++;
 			if( state.getSpace( x, currentY ) == currentPlayer )
@@ -310,6 +432,7 @@ public void printBoard(BoardModel state)
 				if(++blankChain > state.getkLength())
 					break;	
 			}
+			set.add(new Point(x,currentY));
 			currentY++;
 		}
 		
@@ -318,7 +441,7 @@ public void printBoard(BoardModel state)
 		currentY--;
 		
 		while(currentY >= 0 &&
-				state.getSpace( x, currentY ) != (byte)(this.player == 1 ? 2 : 1))
+				state.getSpace( x, currentY ) != otherPlayer)
 		{
 			totalSpace += (currentY < y ) ? 1 : 0;
 			if( state.getSpace( x, currentY ) == currentPlayer )
@@ -336,18 +459,20 @@ public void printBoard(BoardModel state)
 				if(currentY < y && ++blankChain > state.getkLength())
 					break;
 			}
+			set.add(new Point(x,currentY));
 			currentY--;
 		}
 		if(totalSpace < state.getkLength())
 			return 0;
 		for(Integer i : listOfChains)
-			value += i * i;
-		//value +=blanks;
+			value += i * i *2;
+		value +=blanks;
 		return value;
 	}
 
 	private int countHorizontal( BoardModel state, int x, int y, Set<Point> set, byte currentPlayer) 
 	{
+		byte otherPlayer = (byte)(currentPlayer == 1 ? 2 : 1);
 		int value = 0, blankChain = 0, blanks = 0;
 		List<Integer> listOfChains = new ArrayList<Integer>();
 		int currentChain =0;
@@ -355,7 +480,7 @@ public void printBoard(BoardModel state)
 		int currentX = x;
 		
 		while(currentX < state.getWidth() 
-				&& state.getSpace( currentX, y ) != (byte)(this.player == 1 ? 2 : 1))
+				&& state.getSpace( currentX, y ) != otherPlayer)
 		{		
 			totalSpace++;
 			if( state.getSpace( currentX, y ) == currentPlayer )
@@ -372,6 +497,7 @@ public void printBoard(BoardModel state)
 				if(++blankChain > state.getkLength())
 					break;	
 			}
+			set.add(new Point(currentX,y));
 			currentX++;
 		}
 		
@@ -380,7 +506,7 @@ public void printBoard(BoardModel state)
 		currentX--;
 		
 		while(currentX >= 0 && 
-				state.getSpace( currentX, y ) != (byte)(this.player == 1 ? 2 : 1))
+				state.getSpace( currentX, y ) != otherPlayer)
 		{
 			totalSpace += (currentX < x ) ? 1 : 0;
 			if( state.getSpace( currentX, y ) == currentPlayer )
@@ -398,13 +524,14 @@ public void printBoard(BoardModel state)
 				if(currentX < x && ++blankChain > state.getkLength())
 					break;
 			}
+			set.add(new Point(currentX,y));
 			currentX--;
 		}
 		if(totalSpace < state.getkLength())
 			return 0;
 		for(Integer i : listOfChains)
-			value += i * i;
-		value +=blanks;
+			value += i * i *2;
+		value += blanks;
 		return value;
 	}
 
@@ -428,7 +555,7 @@ public void printBoard(BoardModel state)
 				else if(state.getSpace(i,j)== this.player )
 				{
 					val += countByMe(state, i, j , checkedPoints, this.player);
-				} else {				
+								
 					val -= countByMe(state, i, j, checkedPoints, (byte)(this.player == 1 ? 2 : 1));
 				}
 			}

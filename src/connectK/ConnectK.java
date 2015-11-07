@@ -41,7 +41,7 @@ public class ConnectK {
 				if(players[currentPlayer] instanceof GUIPlayer)
 					pf.join();
 				else
-					pf.join(10*1000);
+					pf.join(10*1000);//here to remove time limit
 			} catch (InterruptedException e) {
 				e.printStackTrace();
 			}
