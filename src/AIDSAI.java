@@ -33,27 +33,29 @@ public class AIDSAI extends CKPlayer {
 		{
 			return new Point( state.getWidth()/2, state.getHeight()/2);
 		}
+		
 		PointAndValue choice = new PointAndValue();
 		int depth = 3;
-		choice = topMax(state,depth);
+		choice = topMax(state,depth, null);
 		long timeThistime = System.currentTimeMillis()- startTime;
-		
+		timePassed = timeThistime;
 		while(timeThistime * 8 <= (deadline - timePassed))
 		{
 			long mark = System.currentTimeMillis(); 
-			System.out.println("time:" + (System.currentTimeMillis() - startTime) 
-					+ " deadline: " + deadline);
-			depth ++;
-			choice = topMax(state,depth);
+			depth++;			
+			choice = topMax(state,depth, null);
 			if(choice.value == Integer.MAX_VALUE ||choice.value == 0)
 				break;
 			timePassed =(System.currentTimeMillis() - startTime);
 			timeThistime = System.currentTimeMillis()- mark;
-		}			
+			System.out.println("time:" + (System.currentTimeMillis() - startTime) 
+					+ " deadline: " + deadline);
+		}
+		System.out.println("depth = " + depth);
 		return choice.point; 
 	} 
 	
-	public PointAndValue topMax(BoardModel state, int iterationsLeft )
+	public PointAndValue topMax(BoardModel state, int iterationsLeft, long startTime )
 	{
 		Set<Point> moves = getPossibleMove(state, this.player);
 		Set<PointAndValue> choices = new HashSet<PointAndValue>();
@@ -67,7 +69,7 @@ public class AIDSAI extends CKPlayer {
 		best.value = Integer.MIN_VALUE;
 		for(PointAndValue choice : choices)
 		{				
-			if(choice.value>best.value || choice.point == null)
+			if(choice.value>best.value || best.point == null)
 			{
 				best.point = choice.point;
 				best.value = choice.value;
