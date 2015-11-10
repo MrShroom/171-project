@@ -45,7 +45,7 @@ public class AIDSAI extends CKPlayer {
 					+ " deadline: " + deadline);
 			depth ++;
 			choice = topMax(state,depth);
-			if(choice.value == Integer.MAX_VALUE)
+			if(choice.value == Integer.MAX_VALUE ||choice.value == 0)
 				break;
 			timePassed =(System.currentTimeMillis() - startTime);
 			timeThistime = System.currentTimeMillis()- mark;
@@ -194,16 +194,27 @@ public class AIDSAI extends CKPlayer {
 	private Set<Point> getPossibleMove(BoardModel state, byte player) 
 	{
 		Set<Point> output = new HashSet<Point>();
-		for(int j = 0; j < (state.gravityEnabled() ? 1 : state.getHeight()); j++)
-		{
-			for (int i = 0 ; i < state.getWidth(); i++)
+		if (!state.gravityEnabled())
+			for(int j = 0; j < state.getHeight(); j++)
 			{
-				if(state.getSpace(i, j ) == player || state.getSpace(i,j) == (player == 1 ? 2 : 1))
+				for (int i = 0 ; i < state.getWidth(); i++)
 				{
-					output.addAll(findLocalMoves(state,i,j, player));
+					if(state.getSpace(i, j ) == player || state.getSpace(i,j) == (player == 1 ? 2 : 1))
+					{
+						output.addAll(findLocalMoves(state,i,j, player));
+					}
 				}
 			}
-		}
+		else
+			for (int i = 0 ; i < state.getWidth(); i++)
+			{
+				if( state.getSpace(i, state.getHeight()-1 ) != player 
+						&& state.getSpace(i,state.getHeight()-1) != (player == 1 ? 2 : 1))
+				{
+					output.add(new Point(i,state.getHeight()-1));
+				}
+			}
+		
 		
 		return output;
 	}
