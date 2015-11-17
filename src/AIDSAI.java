@@ -3,29 +3,40 @@
 import connectK.CKPlayer;
 import connectK.BoardModel;
 import java.awt.Point;
-import java.util.HashSet;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Set;
+import java.util.TreeSet;
 
 import com.sun.jmx.remote.internal.ArrayQueue;
 
 public class AIDSAI extends CKPlayer {
 
-	public long startTime;
-	public boolean print = true, stop = false;
-	public long decideTime = 20;
-	public byte otherPlayer;
+	private long startTime;
+	private boolean stop = false;
+	private int decideTime = 20;
+	private byte otherPlayer;
+	private int startDepth = 6;
+	private Map<Point,Integer> timesWasInBest;
 	
-	public class PointAndValue
+	
+	private class PointAndValue
 	{
 		Point point;
 		Integer value;
 	}
 	
-	public AIDSAI(byte player, BoardModel state) {
+	public AIDSAI(byte player, BoardModel state) 
+	{
 		super(player, state);
 		EvaluateState.setCompacity();
-		teamName = "TheArtificialIntelligenceDevelopmentStruggle";
 		otherPlayer = (byte) (this.player == 1 ? 2 : 1);
+		timesWasInBest = new HashMap<Point,Integer>(state.spacesLeft);
+		for(int j = 0; j < state.getHeight(); j++)
+			for (int i = 0 ; i < state.getWidth(); i++)
+				timesWasInBest.put(new Point(i,j), 0);
+		teamName = "TheArtificialIntelligenceDevelopmentStruggle";
 	}
 
 	@Override
@@ -38,7 +49,6 @@ public class AIDSAI extends CKPlayer {
 	public Point getMove(BoardModel state, int deadline) 
 	{
 		startTime = System.currentTimeMillis();
-		print = true;
 		stop = false;
 		//hard code first move. 
 		if (state.spacesLeft == state.getHeight() * state.getWidth())
@@ -50,30 +60,27 @@ public class AIDSAI extends CKPlayer {
 		PointAndValue current = topMax(state, deadline, depth);
 		Point bestSoFar = current.point;
 		
-		do{
-			if(current.value == Integer.MAX_VALUE)
-				break;
-			 ++depth;
+
+		for(depth = startDepth; !stop  && current.value != Integer.MAX_VALUE; ++depth)
+		{
 			current = topMax(state, deadline, depth);
-			if (stop)
-				break;			
-			bestSoFar = current.point;
-			
-		}while(!stop);
+			if (!stop)
+				bestSoFar = current.point;			
+		}
 		
 		long stopTime = System.currentTimeMillis()- startTime;
 		System.out.println("We went " + depth + " levels deep!");
 		System.out.println("Time spent:" + stopTime/1000.0);
 		
-		if(stopTime - deadline > 10)//we cut it too close
+		if( deadline - stopTime  < 10)//we cut it too close
 			decideTime *= 2;
 		return bestSoFar; 
 	} 
 	
-	public PointAndValue topMax(BoardModel state, long deadline, int depth )
+	private PointAndValue topMax(BoardModel state, long deadline, int depth )
 	{
 		
-		Set<Point> moves = getPossibleMove(state);
+		Set<Point> moves = getPossibleMove(state, player);
 		ArrayQueue<PointAndValue> choices = new ArrayQueue<PointAndValue>(moves.size());
 		
 		for(Point myMove : moves)
@@ -92,7 +99,7 @@ public class AIDSAI extends CKPlayer {
 		if(depth == 1 && choices.size() < 2)
 			stop = true;
 		
-		PointAndValue best =new PointAndValue();
+		PointAndValue best = new PointAndValue();
 		best.value = Integer.MIN_VALUE;
 		for(PointAndValue choice : choices)
 		{				
@@ -115,14 +122,7 @@ public class AIDSAI extends CKPlayer {
 			v.point = state.getLastMove();
 			return v;			
 		}
-			
-		if(state.winner() == this.player)
-		{
-			v.value = Integer.MAX_VALUE;
-			v.point = state.getLastMove();
-			return v;
-		}
-		
+				
 		if(state.winner() == 0)
 		{
 			v.value = 0;
@@ -140,13 +140,13 @@ public class AIDSAI extends CKPlayer {
 		
 		if (depth == 0)
 		{			
-			v.value = heuristic(state);
+			v.value = EvaluateState.evaluate(state, this.player);
 			v.point = state.getLastMove();			
 			return v;
 		}
 		
 		v.value = Integer.MIN_VALUE; 
-		Set<Point> moves = getPossibleMove(state);
+		Set<Point> moves = getPossibleMove(state, player);
 		
 		for(Point myMove : moves)
 		{
@@ -160,6 +160,8 @@ public class AIDSAI extends CKPlayer {
 				return v;
 			alpha = Math.max(alpha, v.value);
 		}	
+		
+		updateTimesWasInBest(v.point);
 		return v;		
 	}
 	
@@ -171,14 +173,8 @@ public class AIDSAI extends CKPlayer {
 		{
 			v.value = Integer.MAX_VALUE;
 			v.point = state.getLastMove();
+			updateTimesWasInBest(v.point);
 			return v;
-		}
-		
-		if(state.winner() == otherPlayer)
-		{
-			v.value = Integer.MIN_VALUE;
-			v.point = state.getLastMove();
-			return v;			
 		}
 		
 		if(state.winner() == 0)
@@ -198,13 +194,13 @@ public class AIDSAI extends CKPlayer {
 		
 		if (depth == 0)
 		{			
-			v.value = heuristic(state);
+			v.value = EvaluateState.evaluate(state, this.player);
 			v.point = state.getLastMove();
 			return v;
 		}
 		
 		v.value = Integer.MAX_VALUE; 			
-		Set<Point> moves = getPossibleMove(state);
+		Set<Point> moves = getPossibleMove(state, otherPlayer);
 		
 		for(Point myMove : moves)
 		{
@@ -217,13 +213,27 @@ public class AIDSAI extends CKPlayer {
 			if( v.value <= alpha)
 				return v;	
 			beta = Math.min(beta, v.value);		
-		}		
+		}	
+		updateTimesWasInBest(v.point);
 		return v;
 	}
 	
-	private Set<Point> getPossibleMove(BoardModel state) 
+	public class myCompare implements Comparator<Point>
 	{
-		Set<Point> output = new HashSet<Point>();
+
+		@Override
+		public int compare(Point arg0, Point arg1) 
+		{		
+			if (timesWasInBest.get(arg1)- timesWasInBest.get(arg0) ==0)
+					return (arg1.hashCode()-arg0.hashCode());
+			return timesWasInBest.get(arg1)- timesWasInBest.get(arg0);
+		}
+		
+	}
+	
+	private Set<Point> getPossibleMove(BoardModel state, byte currentPlayer) 
+	{
+		Set<Point> output = new TreeSet<Point>(new myCompare());		
 		if (!state.gravityEnabled())
 			for(int j = 0; j < state.getHeight(); j++)
 			{
@@ -231,8 +241,10 @@ public class AIDSAI extends CKPlayer {
 				{
 					if(state.getSpace(i, j ) == 1 || state.getSpace(i,j) == 2)
 					{
-						output.addAll(findLocalMoves(state,i,j));
+						//findLocalMoves(state,i,j,output);
 					}
+					else
+						output.add(new Point (i,j));
 				}
 			}
 		else
@@ -243,14 +255,13 @@ public class AIDSAI extends CKPlayer {
 				{
 					output.add(new Point(i,state.getHeight()-1));
 				}
-			}		
+			}	
+		
 		return output;
 	}
 
-	private Set<Point> findLocalMoves(BoardModel state, int x, int y) 
-	{
-		Set<Point> output = new HashSet<Point>();
-		
+	private void findLocalMoves(BoardModel state, int x, int y, Set<Point> output) 
+	{	
 		for(int i = ( x <= 1 ? 0 : x - 1 ) ; 
 			i <= x + 1 && i < state.getWidth() ;
 			i++)
@@ -264,13 +275,9 @@ public class AIDSAI extends CKPlayer {
 			}
 			
 		}
-		return output;
 	}
-	
-	private int heuristic(BoardModel state)
-	{ 
-		return EvaluateState.evaluate(state, this.player);
-	}	
-
-	
+	private void updateTimesWasInBest(Point point)
+	{
+		timesWasInBest.put(point, timesWasInBest.get(point)+1);
+	}
 }
