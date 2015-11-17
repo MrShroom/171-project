@@ -1,34 +1,66 @@
+import java.util.Deque;
 import java.util.HashMap;
+import java.util.Iterator;
+import java.util.LinkedList;
 import java.util.Map;
-
 import connectK.BoardModel;
 
 public class EvaluateState 
 {
 	static public Map<BoardModel, Integer> seenBoards;
-	static public int maxMapSize; 
+	static public Deque<BoardModel> myQueue;
+	static public Map<BoardModel, Iterator<BoardModel>> tracker;
 	
-	static public void setCompacity(BoardModel state)
+	
+	//Assume 2116026368 bytes for for maxHeap
+	//but cache size ~1048576 bytes(we want to fit in cache)
+	//and Board model takes ~200 byte
+	//and Integer ~4bytes
+	//and references ~ 8bytes 
+	//therefore for each add to my tracking 
+	//data structs takes ~244 bytes.
+	//1048576 / 244 = ~4297
+	// round down to 4200
+	static public int maxMapSize = 4000; 
+	
+	static public void setCompacity()
 	{
-		maxMapSize= (int) Math.pow(state.getHeight()*state.getWidth(),2);
+		//maxMapSize= (int) Math.pow(state.getHeight()*state.getWidth(),3);
 		seenBoards = new HashMap<BoardModel, Integer> (maxMapSize);
+		tracker = new HashMap<BoardModel, Iterator<BoardModel>>(maxMapSize);
+		myQueue = new LinkedList<BoardModel>();
 	}
 	
 	static public int evaluate(BoardModel state, byte player)
 	{
-		if (seenBoards.size() == maxMapSize)
+		if(seenBoards.containsKey(state))
+			return seenBoards.get(state);
+		
+		if (seenBoards.size() >= maxMapSize)
 		{
-			seenBoards.clear();
-			System.out.println("states Cleareed");
+			BoardModel removeMe = myQueue.poll();
+			seenBoards.remove(removeMe);
+			tracker.remove(removeMe);
 		}
-		if(!seenBoards.containsKey(state))
+		byte otherPlayer = (byte) (player == 1 ? 2 : 1);
+		int value = 0;
+		if(player == 1)
 		{
-			byte otherPlayer = (byte) (player == 1 ? 2 : 1);
-			int value = 0;
-			value += pWinningLines(state, player);
+			value += pWinningLines(state, player) * 1.5;
 			value -= pWinningLines(state, otherPlayer);
-			seenBoards.put(state, value);
 		}
+		else
+		{
+			value += pWinningLines(state, player) ;
+			value -= pWinningLines(state, otherPlayer)* 1.5;
+		}
+		if(tracker.containsKey(state))
+		{
+			tracker.get(state).remove();
+		}
+		seenBoards.put(state, value);
+		myQueue.add(state);
+		tracker.put(state, myQueue.descendingIterator());
 		return seenBoards.get(state);		
 	}
 
@@ -39,8 +71,7 @@ public class EvaluateState
 		
 		//count columns 
 		for(int i =0; i < state.getWidth(); i++)
-		{
-			
+		{			
 			int numberSinceFound =0;
 			for(int j = 0; j < state.getHeight(); j++)
 			{
@@ -195,8 +226,7 @@ public class EvaluateState
 					break;
 				}
 			}
-		}
-		
+		}		
 		return currentCount;
 	}
 }
