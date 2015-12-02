@@ -4,12 +4,7 @@ import connectK.CKPlayer;
 import connectK.BoardModel;
 import java.awt.Point;
 import java.util.Comparator;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Set;
-import java.util.TreeSet;
-
-import com.sun.jmx.remote.internal.ArrayQueue;
+import java.util.PriorityQueue;
 
 public class AIDSAI extends CKPlayer {
 
@@ -17,14 +12,14 @@ public class AIDSAI extends CKPlayer {
 	private boolean stop = false;
 	private int decideTime = 20;
 	private byte otherPlayer;
-	private int startDepth = 6;
-	private Map<Point,Integer> timesWasInBest;
-	
+	private int startDepth = 1;
+	private double [][] lastMoveMaxScore,lastMoveMinScore;	
+	private static final double INFINITY = 1E100;
 	
 	private class PointAndValue
 	{
-		Point point;
-		Integer value;
+		Point point = null;
+		double value = 0;
 	}
 	
 	public AIDSAI(byte player, BoardModel state) 
@@ -32,10 +27,14 @@ public class AIDSAI extends CKPlayer {
 		super(player, state);
 		EvaluateState.setCompacity();
 		otherPlayer = (byte) (this.player == 1 ? 2 : 1);
-		timesWasInBest = new HashMap<Point,Integer>(state.spacesLeft);
-		for(int j = 0; j < state.getHeight(); j++)
-			for (int i = 0 ; i < state.getWidth(); i++)
-				timesWasInBest.put(new Point(i,j), 0);
+		lastMoveMaxScore = new double [state.getWidth()][state.getHeight()];
+		lastMoveMinScore = new double [state.getWidth()][state.getHeight()];
+		for(int i = 0; i < state.getWidth(); i++)
+			for (int j = 0 ; j < state.getHeight(); j++)
+			{
+				lastMoveMaxScore[i][j]= -INFINITY;
+				lastMoveMinScore[i][j]= INFINITY;
+			}
 		teamName = "TheArtificialIntelligenceDevelopmentStruggle";
 	}
 
@@ -50,190 +49,182 @@ public class AIDSAI extends CKPlayer {
 	{
 		startTime = System.currentTimeMillis();
 		stop = false;
-		//hard code first move. 
+		//hard code first move.
 		if (state.spacesLeft == state.getHeight() * state.getWidth())
 		{			
-			return new Point( state.getWidth()/2, state.getHeight()/2);
-		}
+			Point startPoint = new Point( state.getWidth()/2, state.getHeight()/2);
+			goLearn(state.placePiece(startPoint, player), deadline);
+			return startPoint;
+		}		
 		
-		int depth = 1;
-		PointAndValue current = topMax(state, deadline, depth);
-		Point bestSoFar = current.point;
-		
+		PriorityQueue<Point> moves = getPossibleMove(state, player);		
+		PointAndValue current = new PointAndValue();
+		Point bestSoFar = winTest(state, moves, deadline);
 
-		for(depth = startDepth; !stop  && current.value != Integer.MAX_VALUE; ++depth)
-		{
-			current = topMax(state, deadline, depth);
+		int depth;
+		double goingForValue = 0;
+		
+		for(depth = startDepth; !stop ; depth += 1)
+		{			
+			current = minMax(-INFINITY, INFINITY ,state, deadline, depth, true);
 			if (!stop)
-				bestSoFar = current.point;			
+			{
+				bestSoFar = current.point;
+				goingForValue = current.value;
+			}
 		}
 		
-		long stopTime = System.currentTimeMillis()- startTime;
-		System.out.println("We went " + depth + " levels deep!");
+		long stopTime = System.currentTimeMillis() - startTime;
+		System.out.println("We went " + (depth - 1) + " levels deep!");
 		System.out.println("Time spent:" + stopTime/1000.0);
-		
+		System.out.println("Going for:" + goingForValue);
 		if( deadline - stopTime  < 10)//we cut it too close
 			decideTime *= 2;
 		return bestSoFar; 
 	} 
 	
-	private PointAndValue topMax(BoardModel state, long deadline, int depth )
+	private void goLearn(BoardModel state, int deadline)
 	{
-		
-		Set<Point> moves = getPossibleMove(state, player);
-		ArrayQueue<PointAndValue> choices = new ArrayQueue<PointAndValue>(moves.size());
-		
-		for(Point myMove : moves)
+		for(int depth = startDepth; !stop ; ++depth)
 		{
-			Integer alpha = Integer.MIN_VALUE;
-			Integer beta = Integer.MAX_VALUE;
-			PointAndValue v = minPlay(alpha, beta , state.placePiece(myMove, this.player), deadline, depth - 1);
-			v.point = myMove;
-			if(depth == 1 && state.placePiece(myMove, otherPlayer).winner() == otherPlayer)
-			{ 	
-				stop = true;
-				return v;
-			}
-			choices.add(v);
+			minMax(-INFINITY, INFINITY , state, deadline, depth, false);
 		}
-		if(depth == 1 && choices.size() < 2)
-			stop = true;
-		
-		PointAndValue best = new PointAndValue();
-		best.value = Integer.MIN_VALUE;
-		for(PointAndValue choice : choices)
-		{				
-			if(choice.value >= best.value )
-			{
-				best.point = choice.point;
-				best.value = choice.value;
-			}
-		}		
-		return best;
 	}
 	
-	private PointAndValue maxPlay( Integer alpha, Integer beta, BoardModel state, long deadline, int depth )
+	private  Point winTest(BoardModel state, PriorityQueue<Point> moves, int deadline)
+	{
+		for(Point myMove : moves)
+		{
+			if( state.placePiece(myMove, player).winner() == player 
+					|| state.placePiece(myMove, player).winner() == 0)
+			{
+				stop = true;
+				return myMove;
+			}
+		}
+		for(Point myMove : moves)
+		{
+			if(state.placePiece(myMove, otherPlayer).winner() == otherPlayer)
+			{
+				goLearn(state.placePiece(myMove, player), deadline);
+				return myMove;
+			}
+		}
+		return null;
+	}
+	
+	private PointAndValue minMax( double alpha, double beta, BoardModel state, int deadline, int depth, boolean max )
 	{
 		PointAndValue v = new PointAndValue();
+		byte currentPlayer = (max ? player : otherPlayer);
+		
+		if(state.winner() == player)
+		{
+			v.value =  INFINITY;
+			v.point = null;
+			return v;
+		}	
 		
 		if(state.winner() == otherPlayer)
 		{
-			v.value = Integer.MIN_VALUE;
-			v.point = state.getLastMove();
+			v.value = -INFINITY;
+			v.point = null;
 			return v;			
 		}
-				
+			
 		if(state.winner() == 0)
 		{
 			v.value = 0;
-			v.point = state.getLastMove();
+			v.point = null;
 			return v;			
 		}
-		
 		if (stop || System.currentTimeMillis() > (startTime + deadline - decideTime))
 		{			
-			v.value = 0;
-			v.point = null;
 			stop = true;
 			return v;
-		}
+		}     
 		
 		if (depth == 0)
 		{			
 			v.value = EvaluateState.evaluate(state, this.player);
-			v.point = state.getLastMove();			
+			v.point = null;
 			return v;
-		}
+		}		
+		 
+		PriorityQueue<Point> moves = getPossibleMove(state, currentPlayer);
+		Point myMove;
+		v.value = (max ? -1 : 1) * INFINITY;
 		
-		v.value = Integer.MIN_VALUE; 
-		Set<Point> moves = getPossibleMove(state, player);
-		
-		for(Point myMove : moves)
+		PointAndValue w; 
+		while(!moves.isEmpty())
 		{
-			PointAndValue w = minPlay(alpha, beta , state.placePiece(myMove, this.player), deadline, depth - 1 );
-			if( w.value >= v.value  )
+			myMove = moves.poll();
+			w = minMax(alpha, beta , state.placePiece(myMove, currentPlayer), deadline, depth - 1, (!max));
+				
+			if(max)
 			{
-				v.value = w.value;
-				v.point = myMove;
-			}			
-			if( v.value >= beta)
-				return v;
-			alpha = Math.max(alpha, v.value);
+				if(w.value >= v.value)
+				{
+					v.value = w.value;
+					v.point = myMove;
+				}	
+				alpha = Math.max(alpha, v.value);
+				if (alpha >= beta) 
+					break;	 
+			}
+			else 
+			{
+				if(w.value <= v.value)
+				{
+					v.value = w.value;
+					v.point = myMove;
+				}
+
+				beta = Math.min(beta, v.value);
+				if (alpha >= beta)
+					break;	
+			}
 		}	
 		
-		updateTimesWasInBest(v.point);
+		updateTimesWasInBest(v, currentPlayer);
 		return v;		
 	}
 	
-	private PointAndValue minPlay(Integer alpha, Integer beta, BoardModel state, long deadline, int depth )
+	public class MaxCompare implements Comparator<Point>
 	{
-		PointAndValue v = new PointAndValue();
-		
-		if(state.winner() == this.player)
+		@Override
+		public int compare(Point arg0, Point arg1) 
 		{
-			v.value = Integer.MAX_VALUE;
-			v.point = state.getLastMove();
-			updateTimesWasInBest(v.point);
-			return v;
+			if (lastMoveMaxScore[arg1.x][arg1.y] > lastMoveMaxScore[arg0.x][arg0.y])
+				return -1;
+			if (lastMoveMaxScore[arg1.x][arg1.y] < lastMoveMaxScore[arg0.x][arg0.y])
+				return 1;
+			return 0;
 		}
 		
-		if(state.winner() == 0)
-		{
-			v.value = 0;
-			v.point = state.getLastMove();
-			return v;			
-		}
-		
-		if (stop || System.currentTimeMillis() > (startTime + deadline - decideTime))
-		{
-			stop = true;
-			v.value = 0;
-			v.point = null;			
-			return v;
-		}
-		
-		if (depth == 0)
-		{			
-			v.value = EvaluateState.evaluate(state, this.player);
-			v.point = state.getLastMove();
-			return v;
-		}
-		
-		v.value = Integer.MAX_VALUE; 			
-		Set<Point> moves = getPossibleMove(state, otherPlayer);
-		
-		for(Point myMove : moves)
-		{
-			PointAndValue w = maxPlay(alpha, beta , state.placePiece(myMove, otherPlayer),deadline, depth -1 );
-			if( w.value <= v.value )
-			{
-				v.value = w.value;
-				v.point = myMove;
-			}			
-			if( v.value <= alpha)
-				return v;	
-			beta = Math.min(beta, v.value);		
-		}	
-		updateTimesWasInBest(v.point);
-		return v;
 	}
-	
-	public class myCompare implements Comparator<Point>
+	public class MinCompare implements Comparator<Point>
 	{
-
 		@Override
 		public int compare(Point arg0, Point arg1) 
 		{		
-			if (timesWasInBest.get(arg1)- timesWasInBest.get(arg0) ==0)
-					return (arg1.hashCode()-arg0.hashCode());
-			return timesWasInBest.get(arg1)- timesWasInBest.get(arg0);
+			if (lastMoveMinScore[arg1.x][arg1.y] > lastMoveMinScore[arg0.x][arg0.y])
+				return -1;
+			if (lastMoveMinScore[arg1.x][arg1.y] < lastMoveMinScore[arg0.x][arg0.y])
+				return 1;
+			return 0;
 		}
 		
 	}
 	
-	private Set<Point> getPossibleMove(BoardModel state, byte currentPlayer) 
+	private PriorityQueue<Point> getPossibleMove(BoardModel state, byte currentPlayer) 
 	{
-		Set<Point> output = new TreeSet<Point>(new myCompare());		
+		PriorityQueue<Point> output;
+		if (currentPlayer == player)
+			output = new PriorityQueue<Point>(state.spacesLeft, new MaxCompare());
+		else
+			output = new PriorityQueue<Point>(state.spacesLeft, new MinCompare());
+		
 		if (!state.gravityEnabled())
 			for(int j = 0; j < state.getHeight(); j++)
 			{
@@ -241,10 +232,10 @@ public class AIDSAI extends CKPlayer {
 				{
 					if(state.getSpace(i, j ) == 1 || state.getSpace(i,j) == 2)
 					{
-						//findLocalMoves(state,i,j,output);
+						findLocalMoves(state,i,j,output);
 					}
-					else
-						output.add(new Point (i,j));
+					//else
+						//output.add(new Point (i,j));
 				}
 			}
 		else
@@ -260,7 +251,7 @@ public class AIDSAI extends CKPlayer {
 		return output;
 	}
 
-	private void findLocalMoves(BoardModel state, int x, int y, Set<Point> output) 
+	private void findLocalMoves(BoardModel state, int x, int y, PriorityQueue<Point> output) 
 	{	
 		for(int i = ( x <= 1 ? 0 : x - 1 ) ; 
 			i <= x + 1 && i < state.getWidth() ;
@@ -276,8 +267,14 @@ public class AIDSAI extends CKPlayer {
 			
 		}
 	}
-	private void updateTimesWasInBest(Point point)
+	
+	private void updateTimesWasInBest(PointAndValue v, byte currentPlayer)
 	{
-		timesWasInBest.put(point, timesWasInBest.get(point)+1);
+		if(v == null || v.point == null )
+			return;
+		if (currentPlayer == player)
+			lastMoveMaxScore[v.point.x][v.point.y] = v.value;
+		else
+			lastMoveMinScore[v.point.x][v.point.y] = v.value;
 	}
 }
