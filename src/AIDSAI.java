@@ -13,22 +13,23 @@ public class AIDSAI extends CKPlayer {
 	private int decideTime = 20;
 	private byte otherPlayer;
 	private int startDepth = 1;
-	private double [][] lastMoveMaxScore,lastMoveMinScore;	
-	private static final double INFINITY = 1E100;
+	private int maxNumMoves = 0;
+	private long [][] lastMoveMaxScore,lastMoveMinScore;	
+	private static final long INFINITY = Long.MAX_VALUE;
 	
 	private class PointAndValue
 	{
 		Point point = null;
-		double value = 0;
+		long value = 0;
 	}
 	
 	public AIDSAI(byte player, BoardModel state) 
 	{
 		super(player, state);
-		EvaluateState.setCompacity();
+		EvaluateState.setCompacity(state, player);
 		otherPlayer = (byte) (this.player == 1 ? 2 : 1);
-		lastMoveMaxScore = new double [state.getWidth()][state.getHeight()];
-		lastMoveMinScore = new double [state.getWidth()][state.getHeight()];
+		lastMoveMaxScore = new long [state.getWidth()][state.getHeight()];
+		lastMoveMinScore = new long [state.getWidth()][state.getHeight()];
 		for(int i = 0; i < state.getWidth(); i++)
 			for (int j = 0 ; j < state.getHeight(); j++)
 			{
@@ -49,6 +50,7 @@ public class AIDSAI extends CKPlayer {
 	{
 		startTime = System.currentTimeMillis();
 		stop = false;
+		maxNumMoves = 0;
 		//hard code first move.
 		if (state.spacesLeft == state.getHeight() * state.getWidth())
 		{			
@@ -62,8 +64,7 @@ public class AIDSAI extends CKPlayer {
 		Point bestSoFar = winTest(state, moves, deadline);
 
 		int depth;
-		double goingForValue = 0;
-		
+		long goingForValue = 0;		
 		for(depth = startDepth; !stop ; depth += 1)
 		{			
 			current = minMax(-INFINITY, INFINITY ,state, deadline, depth, true);
@@ -78,6 +79,7 @@ public class AIDSAI extends CKPlayer {
 		System.out.println("We went " + (depth - 1) + " levels deep!");
 		System.out.println("Time spent:" + stopTime/1000.0);
 		System.out.println("Going for:" + goingForValue);
+		System.out.println("maxNumMoves:" + maxNumMoves);
 		if( deadline - stopTime  < 10)//we cut it too close
 			decideTime *= 2;
 		return bestSoFar; 
@@ -113,41 +115,43 @@ public class AIDSAI extends CKPlayer {
 		return null;
 	}
 	
-	private PointAndValue minMax( double alpha, double beta, BoardModel state, int deadline, int depth, boolean max )
+	private PointAndValue minMax( long alpha, long beta, BoardModel state, int deadline, int depth, boolean max )
 	{
 		PointAndValue v = new PointAndValue();
 		byte currentPlayer = (max ? player : otherPlayer);
 		
 		if(state.winner() == player)
 		{
-			v.value =  INFINITY;
-			v.point = null;
+			v.value = INFINITY;
+			v.point = state.lastMove;
 			return v;
 		}	
 		
 		if(state.winner() == otherPlayer)
 		{
 			v.value = -INFINITY;
-			v.point = null;
+			v.point = state.lastMove;
 			return v;			
 		}
 			
 		if(state.winner() == 0)
 		{
 			v.value = 0;
-			v.point = null;
+			v.point = state.lastMove;
 			return v;			
 		}
+		
 		if (stop || System.currentTimeMillis() > (startTime + deadline - decideTime))
 		{			
 			stop = true;
 			return v;
 		}     
 		
-		if (depth == 0)
+		if(depth == 0)
 		{			
 			v.value = EvaluateState.evaluate(state, this.player);
-			v.point = null;
+			maxNumMoves ++;
+			v.point = state.lastMove;
 			return v;
 		}		
 		 
@@ -169,8 +173,6 @@ public class AIDSAI extends CKPlayer {
 					v.point = myMove;
 				}	
 				alpha = Math.max(alpha, v.value);
-				if (alpha >= beta) 
-					break;	 
 			}
 			else 
 			{
@@ -179,11 +181,10 @@ public class AIDSAI extends CKPlayer {
 					v.value = w.value;
 					v.point = myMove;
 				}
-
 				beta = Math.min(beta, v.value);
-				if (alpha >= beta)
-					break;	
-			}
+			}			
+			if (alpha >= beta)
+				break;
 		}	
 		
 		updateTimesWasInBest(v, currentPlayer);
@@ -246,8 +247,7 @@ public class AIDSAI extends CKPlayer {
 				{
 					output.add(new Point(i,state.getHeight()-1));
 				}
-			}	
-		
+			}
 		return output;
 	}
 

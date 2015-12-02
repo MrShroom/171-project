@@ -2,35 +2,49 @@ import connectK.BoardModel;
 
 public class EvaluateState 
 {
-	static private MyLRU<BoardModel, Double> seenBoards;
+	static private MyLRU<BoardModel, Long> seenBoards;
 
-	static final private int maxMapSize = 4000; 
-	static final private double base = 10.0;
-	static final private double bias = 0.85;	
+	static final private int maxMapSize = 700000; 
+	static final private double base = 4.0;
+	static private double playerBias = .75;
+	static final private double diagonalBias = 1.05;
 	static private int possibleWin[][];
 	static private int possibleLoses[][];
+	static private int longestDia;
 	
-	static public void setCompacity()
+	static public void setCompacity(BoardModel state, byte player)
 	{
-		seenBoards = new MyLRU<BoardModel, Double> (maxMapSize);
+		seenBoards = new MyLRU<BoardModel, Long> (maxMapSize);
+		if ( player == 1)
+			playerBias = .75;
+		else 
+			playerBias = .50;
 	}
 	
-	static public double evaluate(BoardModel state, byte player)
+	static public long evaluate(BoardModel state, byte player)
 	{
 		if(seenBoards.containsKey(state))
 		{
 			return seenBoards.get(state);
 		}			
     
-		double value = 0;
+		long value = 0;
 		pWinningLines(state, player);
 		
-		for (int j = 0; j < 4; j++) 
+		for (int j = 0; j < 2; j++) 
 		{
-		  for (int i = 1; i < state.kLength ; i++) 
+		  for (int i = 1; i < longestDia ; i++) 
 		  {
-			  value += (possibleWin[j][i] * Math.pow(base, i)* bias);
+			  value += (possibleWin[j][i] * Math.pow(base, i)* playerBias);
 			  value -= (possibleLoses[j][i] * Math.pow(base, i));
+		  }
+		}
+		for (int j = 2; j < 4; j++) 
+		{
+		  for (int i = 1; i < longestDia ; i++) 
+		  {
+			  value += (possibleWin[j][i] * Math.pow(base, i)* playerBias *diagonalBias);
+			  value -= (possibleLoses[j][i] * Math.pow(base, i) * diagonalBias);
 		  }
 		}	
 		seenBoards.put(state, value);
@@ -39,9 +53,9 @@ public class EvaluateState
 
 	private static void reset(BoardModel state)
 	{
-		
-		possibleWin = new int [4][state.getkLength()];
-		possibleLoses = new int [4][state.getkLength()];
+		longestDia = (int)(Math.sqrt(Math.pow(state.getHeight(),2))+ Math.pow(state.getWidth(),2)) + 1;
+		possibleWin = new int [4][longestDia];
+		possibleLoses = new int [4][longestDia];
 		for(int j = 0; j < 4; j++)
 		{
 			for(int i = 0; i < state.getkLength(); i++)
@@ -53,195 +67,301 @@ public class EvaluateState
 	}
 	private static void pWinningLines(BoardModel state, byte player)
 	{
-		int numberPlayerFound = 0,numberOtherPlayerFound = 0;
+		int numberPlayerFound = 0;
+		int numberOtherPlayerFound = 0;
+		int blanks = 0;
+		boolean me = true;
 		byte otherPlayer = (byte) (player == 1 ? 2 : 1);
 		reset(state);
+		
 		//count columns 
 		for(int i =0; i < state.getWidth(); i++)
 		{
-			for(int j = 0; j < state.getHeight() - state.kLength; j++)
-			{
-				for(int l = j; l < j + state.kLength ; l++)
+			for(int j = 0; j < state.getHeight(); j++)
+			{				
+				if(state.getSpace(i, j) == player)
 				{
-					if(state.getSpace(i, l) == player)
+					if (!me && numberOtherPlayerFound >0)
 					{
-						numberPlayerFound++;
+						blanks = 0;
+						numberOtherPlayerFound =0;
 					}
-					else if(state.getSpace(i, l) == otherPlayer)
-					{
-						numberOtherPlayerFound++;
-					}
+					me = true;
+					numberPlayerFound++;
 				}
-				if (numberPlayerFound == 0) 
-			    {
-					
-					possibleLoses[0][numberOtherPlayerFound]++;
-		        }
-				else if(numberOtherPlayerFound == 0)
+				else if(state.getSpace(i, j) == otherPlayer)
 				{
-					possibleWin[0][numberPlayerFound]++;
+					if (me && numberPlayerFound>0)
+					{
+						blanks = 0;
+						numberPlayerFound =0;
+					}
+					me = false;
+					numberOtherPlayerFound++;
+				}	
+				else 
+				{
+					blanks++;
 				}
-				numberPlayerFound =0;
-				numberOtherPlayerFound =0;
+				if(blanks + numberPlayerFound >= state.getkLength()
+						|| blanks + numberOtherPlayerFound >= state.getkLength())
+					break;
+				
 			}
+			if ((numberOtherPlayerFound + blanks) >= state.getkLength() ) 
+		    {				
+				possibleLoses[0][numberOtherPlayerFound]++;
+	        }
+			else if((numberPlayerFound + blanks) >= state.getkLength())
+			{
+				possibleWin[0][numberPlayerFound]++;
+			}
+			numberPlayerFound =0;
+			numberOtherPlayerFound =0;
+			blanks = 0;
 		}
 			
 		//count rows
 		for(int j = 0; j < state.getHeight(); j++)
 		{
-			for(int i =0; i < state.getWidth() - state.kLength; i++)
-			{				
-				for(int l = i; l < i + state.kLength; l++)
-				{
-					if(state.getSpace(l,j) == player)
+			for(int i =0; i < state.getWidth(); i++)
+			{
+					if(state.getSpace(i, j) == player)
 					{
+						if (!me && numberOtherPlayerFound >0)
+						{
+							blanks = 0;
+							numberOtherPlayerFound =0;
+						}
+						me = true;
 						numberPlayerFound++;
 					}
-					else if(state.getSpace(l,j) == otherPlayer)
+					else if(state.getSpace(i, j) == otherPlayer)
 					{
+						if (me && numberPlayerFound>0)
+						{
+							blanks = 0;
+							numberPlayerFound =0;
+						}
+						me = false;
 						numberOtherPlayerFound++;
+					}	
+					else 
+					{
+						blanks++;
 					}
-				}
-				if (numberPlayerFound == 0) 
-			    {					
-					possibleLoses[1][numberOtherPlayerFound]++;
-		        }
-				else if(numberOtherPlayerFound == 0)
-				{
-					possibleWin[1][numberPlayerFound]++;
-				}
-				numberPlayerFound =0;
-				numberOtherPlayerFound =0;
+					if(blanks + numberPlayerFound >= state.getkLength()
+							|| blanks + numberOtherPlayerFound >= state.getkLength())
+						break;
+		
 			}
+			if ((numberOtherPlayerFound + blanks) >= state.getkLength() ) 
+		    {
+				
+				possibleLoses[1][numberOtherPlayerFound]++;
+	        }
+			else if((numberPlayerFound + blanks) >= state.getkLength())
+			{
+				possibleWin[1][numberPlayerFound]++;
+			}
+			numberPlayerFound =0;
+			numberOtherPlayerFound =0;
+			blanks = 0;
 		}
 		
 		//up right or down left diagonal. 
-		int jj;		
-		int howhigh = state.getHeight()- state.kLength +1;
-		int howlong = state.getWidth() - state.kLength +1;
-		for(int j = 0; j < howhigh; j++)
+		int jj;
+		for(int j = 0; j < state.getHeight(); j++)
 		{	
 			jj = j;			
-			for(int i = 0; i < howlong && jj < howhigh; i++, jj++)
+			for(int i = 0; i < state.getWidth() && jj < state.getHeight(); i++, jj++)
 			{
-				for(int l = i, ll = jj; l < i + state.kLength && ll < jj + state.kLength; l++, ll++)
+				
+				if(state.getSpace(i, jj) == player)
 				{
-					if(state.getSpace(l,ll) == player)
+					if (!me && numberOtherPlayerFound >0)
 					{
-						numberPlayerFound++;
+						blanks = 0;
+						numberOtherPlayerFound =0;
 					}
-					else if(state.getSpace(l,ll) == otherPlayer)
-					{
-						numberOtherPlayerFound++;
-					}
+					me = true;
+					numberPlayerFound++;
 				}
-				if (numberPlayerFound == 0) 
-			    {
-					
-					possibleLoses[2][numberOtherPlayerFound]++;
-		        }
-				else if(numberOtherPlayerFound == 0)
+				else if(state.getSpace(i, jj) == otherPlayer)
 				{
-					possibleWin[2][numberPlayerFound]++;
+					if (me && numberPlayerFound>0)
+					{
+						blanks = 0;
+						numberPlayerFound =0;
+					}
+					me = false;
+					numberOtherPlayerFound++;
+				}	
+				else 
+				{
+					blanks++;
 				}
-				numberPlayerFound =0;
-				numberOtherPlayerFound =0;
+				if(blanks + numberPlayerFound >= state.getkLength()
+						|| blanks + numberOtherPlayerFound >= state.getkLength())
+					break;
+			}				
+			
+			if ((numberOtherPlayerFound + blanks) >= state.getkLength() ) 
+		    {
+				
+				possibleLoses[2][numberOtherPlayerFound]++;
+	        }
+			else if((numberPlayerFound + blanks) >= state.getkLength())
+			{
+				possibleWin[2][numberPlayerFound]++;
 			}
+			numberPlayerFound =0;
+			numberOtherPlayerFound =0;
+			blanks = 0;
 				
 		}
 		
 		//up right or down left diagonal.(cont.)
 		int ii;
-		for(int i = 1; i < howlong; i++)
+		for(int i = 1; i < state.getWidth(); i++)
 		{
 			ii = i;			
-			for(int j = 0; ii < howlong && j < howhigh; ii++, j++)
+			for(int j = 0; ii < state.getWidth() && j < state.getHeight(); ii++, j++)
 			{
-				for(int l = ii, ll = j; l < ii + state.kLength && ll < j + state.kLength; l++, ll++)
+				if(state.getSpace(ii, j) == player)
 				{
-					if(state.getSpace(l,ll) == player)
+					if (!me && numberOtherPlayerFound >0)
 					{
-						numberPlayerFound++;
+						blanks = 0;
+						numberOtherPlayerFound =0;
 					}
-					else if(state.getSpace(l,ll) == otherPlayer)
-					{
-						numberOtherPlayerFound++;
-					}
+					me = true;
+					numberPlayerFound++;
 				}
-				if (numberPlayerFound == 0) 
-			    {
-					
-					possibleLoses[2][numberOtherPlayerFound]++;
-		        }
-				else if(numberOtherPlayerFound == 0)
+				else if(state.getSpace(ii, j) == otherPlayer)
 				{
-					possibleWin[2][numberPlayerFound]++;
+					if (me && numberPlayerFound>0)
+					{
+						blanks = 0;
+						numberPlayerFound =0;
+					}
+					me = false;
+					numberOtherPlayerFound++;
+				}	
+				else 
+				{
+					blanks++;
 				}
-				numberPlayerFound =0;
-				numberOtherPlayerFound =0;
+				if(blanks + numberPlayerFound >= state.getkLength()
+						|| blanks + numberOtherPlayerFound >= state.getkLength())
+					break;
 			}
+			if ((numberOtherPlayerFound + blanks) >= state.getkLength() ) 
+		    {
+				
+				possibleLoses[2][numberOtherPlayerFound]++;
+	        }
+			else if((numberPlayerFound + blanks) >= state.getkLength())
+			{
+				possibleWin[2][numberPlayerFound]++;
+			}
+			numberPlayerFound =0;
+			numberOtherPlayerFound =0;
+			blanks = 0;
 		}
 		
 		//up left or down right diagonal.		
-		for(int j = state.getHeight()-1; j >= state.kLength ; j--)
+		for(int j = state.getHeight()-1; j >= 0 ; j--)
 		{
 			jj = j;			
-			for(int i = 0; i < howlong && jj >=state.kLength; i++, jj--)
+			for(int i = 0; i < state.getWidth() && jj >=0; i++, jj--)
 			{
-				for(int l = i, ll = jj; l < i + state.kLength && ll > jj - state.kLength; l++, ll--)
+				if(state.getSpace(i, jj) == player)
 				{
-					if(state.getSpace(l,ll) == player)
+					if (!me && numberOtherPlayerFound >0)
 					{
-						numberPlayerFound++;
+						blanks = 0;
+						numberOtherPlayerFound =0;
 					}
-					else if(state.getSpace(l,ll) == otherPlayer)
-					{
-						numberOtherPlayerFound++;
-					}
+					me = true;
+					numberPlayerFound++;
 				}
-				if (numberPlayerFound == 0) 
-			    {
-					
-					possibleLoses[3][numberOtherPlayerFound]++;
-		        }
-				else if(numberOtherPlayerFound == 0)
+				else if(state.getSpace(i, jj) == otherPlayer)
 				{
-					possibleWin[3][numberPlayerFound]++;
+					if (me && numberPlayerFound>0)
+					{
+						blanks = 0;
+						numberPlayerFound =0;
+					}
+					me = false;
+					numberOtherPlayerFound++;
+				}	
+				else 
+				{
+					blanks++;
 				}
-				numberPlayerFound =0;
-				numberOtherPlayerFound =0;	
+				if(blanks + numberPlayerFound >= state.getkLength()
+						|| blanks + numberOtherPlayerFound >= state.getkLength())
+					break;
 			}
+			if ((numberOtherPlayerFound + blanks) >= state.getkLength() ) 
+		    {				
+				possibleLoses[3][numberOtherPlayerFound]++;
+	        }
+			else if((numberPlayerFound + blanks) >= state.getkLength())
+			{
+				possibleWin[3][numberPlayerFound]++;
+			}
+			numberPlayerFound =0;
+			numberOtherPlayerFound =0;
+			blanks = 0;
 		}
 		
 		//up left or down right diagonal(cont.)
-		for(int i = 1; i < howlong ; i++)
+		for(int i = 1; i < state.getWidth() ; i++)
 		{
 			ii = i;
-			for(int j = state.getHeight() - 1; ii < howlong && j >state.kLength; ii++, j--)
+			for(int j = state.getHeight() - 1; ii < state.getWidth() && j >=0; ii++, j--)
 			{
-				for(int l = i, ll = j; l < i + state.kLength && ll > j-state.kLength; l++, ll--)
+				if(state.getSpace(ii, j) == player)
 				{
-					if(state.getSpace(l,ll) == player)
+					if (!me && numberOtherPlayerFound >0)
 					{
-						numberPlayerFound++;
+						blanks = 0;
+						numberOtherPlayerFound =0;
 					}
-					else if(state.getSpace(l,ll) == otherPlayer)
-					{
-						numberOtherPlayerFound++;
-					}
+					me = true;
+					numberPlayerFound++;
 				}
-				if (numberPlayerFound == 0) 
-			    {
-					
-					possibleLoses[3][numberOtherPlayerFound]++;
-		        }
-				else if(numberOtherPlayerFound == 0)
+				else if(state.getSpace(ii, j) == otherPlayer)
 				{
-					possibleWin[3][numberPlayerFound]++;
-				}
-				numberPlayerFound =0;
-				numberOtherPlayerFound =0;	
+					if (me && numberPlayerFound>0)
+					{
+						blanks = 0;
+						numberPlayerFound = 0;
+					}
+					me = false;
+					numberOtherPlayerFound++;
+				}	
+				else 
+				{
+					blanks++;
+				}	
+				if(blanks + numberPlayerFound >= state.getkLength()
+						|| blanks + numberOtherPlayerFound >= state.getkLength())
+					break;
 			}
+			if ((numberOtherPlayerFound + blanks) >= state.getkLength() ) 
+		    {				
+				possibleLoses[3][numberOtherPlayerFound]++;
+	        }
+			else if((numberPlayerFound + blanks) >= state.getkLength())
+			{
+				possibleWin[3][numberPlayerFound]++;
+			}
+			numberPlayerFound =0;
+			numberOtherPlayerFound =0;
+			blanks = 0;
 		}
 	}
 
